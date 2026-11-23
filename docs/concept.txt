@@ -1,0 +1,68 @@
+Ogólny zamysł.
+
+Wstępna analiza
+
+Isntieją sobie grafy które są duże i przeszukiwanie ich globalnie jest problemem (TODO: jakie)
+Koncept przeszukiwania grafów w sposób lokalny (ograniczona obserwowalność otoczenia).
+
+1. W Reinforcement Learning Discovers Efficient Decentralized Graph Path Search Strategies
+- poszukiwanie ścieżek
+- homophily: tendencji węzłów o podobnych atrybutach do tworzenia bezpośrednich połączeń.
+- Structural Heterogeneity: organizacji sieci w gęsto połączone lokalne społeczności, skomunikowane ze sobą za pośrednictwem nielicznych słabych powiązań (weak ties) lub węzłów centralnych (hubs).
+- traktowanie każdego węzła jako agenta
+- pojęcie częściowo obserwowalnego procesu decyzyjnego Markowa
+- metoda GARDEN która używa:
+    - CTDE: czyli trenujemy jedną sieć ale jest ona executowana per node
+    - GAT: (TODO, co to? czy to jest Graph Attention Layers? jak to jest budowane?)
+- aby zapobiec powstawaniu pętli wprowadzono trunkacje T_max = 100
+- algorytm Advantage Actor-Critic: (co to? TODO)
+- MLPA2C i MLPA2CWD: (jakie mają znaczenie? co to? TODO)
+- surowe atrybuty (co to znaczy surowe atrybuty? czym są te atrybuty? TODO), wygenerowane przez Graph Attention Network (co to? czy to jakaś sieć czy jak?)
+- memory-less search: model nie zna histori
+
+Metryki:
+- R_oracle: stosunek długości odnalezionej ścieżki do najkrótszej możliwej trasie w grafie
+- R_trunc: odsetek epizodów, które nie dotarły do celu przed przekroczeniem limitu T kroków
+- R_win: odsetek epizodów, w których dany model uzyskał najkrótszą trasę spośród wszystkich badanych podejść
+
+
+2. Learning Graph Search Heuristics
+- poszukiwanie ścieżek
+- Heuristics (co to znaczy? TODO)
+- imitation learninch (co to? TODO)
+- graph representation learning (co to? TODO)
+- GNN (jaką ma role? TODO)
+- truncated backpropagation through time (co to? TODO)
+- to nie jest Reinforcement Learning???
+- cost-to-go oracle (co to?)
+- explored graph memory (potencjalnie do użycia w GARDEN)
+- pojawia się pojęcie zęściowo obserwowalnych procesów decyzyjnych Markowa (czy to się różni od tego co jest w 1 publikacji?)
+- czy to jest poszukiwanie ścieżek ale globalnie???
+- jak tutaj reprezentowane są cechy? czym różni się od reprezentacji w 1?
+- jak tu wygląda pamięć? jak można to przenieść do GARDEN?
+- co to jest GRU?
+
+Metryki:
+- w sumie to nie wiem co oni mierzyli
+
+3. Monte Carlo Tree Search
+- Reinforcement Learning
+- enkoder stanu RNN
+- algorytm Monte Carlo Tree Search
+- współdzielone sieci i wartości Q
+- pojawia się pojęcie proces decyzyjny Markowa
+- co to "polityka" w kontekscie RL?
+- co to Q (dunckja wartości akcji) w kontekscie RL?
+- koduje historyczną trajektorie kroku t (w sumie to jak? czego używa do tego?)
+- czy GRU-RNN jest odpowiedzialny za historie?
+
+Metryki:
+- co oni mierzyli?
+
+
+
+Mój pomysł na projekt na podstawie analizy
+- chciałbym wziąć tego GARDEN oraz dorobić do niego pamięć (aby znał historie). 
+- Z artykułu 2 i 3 chciałbym wziąć "pamięć"
+- porówanć moją implementacje wraz z GARDEN, M-Walk, PHIL
+

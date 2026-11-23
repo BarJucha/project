@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decentralized Graph Search: Comparing Memory Types</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-card: #ffffff;
+      --surface-card-hover: #f1f5f9;
+      --border: #e2e8f0;
+      --border-highlight: #bfdbfe;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --text-light: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --secondary: #6366f1;
+      --secondary-light: #eef2ff;
+      --accent: #059669;
+      --accent-light: #ecfdf5;
+      --amber: #d97706;
+      --amber-light: #fffbeb;
+      --amber-border: #fde68a;
+      --amber-text: #78350f;
+      --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Progress Bar */
+    .progress-bar-container {
+      width: 100%;
+      height: 4px;
+      background: #e2e8f0;
+      position: relative;
+      z-index: 50;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 25%;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      transition: width 0.35s ease;
+    }
+
+    /* Header Bar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 40px;
+      border-bottom: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: var(--shadow-sm);
+      z-index: 40;
+    }
+
+    .brand {
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+    }
+
+    .header-meta {
+      font-size: 0.85rem;
+      color: var(--text-light);
+      font-weight: 500;
+    }
+
+    /* Main Deck Stage */
+    main {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 48px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(35px) scale(0.99);
+      transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) scale(1);
+    }
+
+    .slide.previous {
+      transform: translateX(-35px) scale(0.99);
+    }
+
+    /* Badges & Titles */
+    .slide-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: var(--primary-light);
+      border: 1px solid var(--border-highlight);
+      border-radius: 9999px;
+      color: var(--primary);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+      width: fit-content;
+    }
+
+    .slide-badge.accent {
+      background: var(--accent-light);
+      border-color: #a7f3d0;
+      color: var(--accent);
+    }
+
+    .slide-badge.secondary {
+      background: var(--secondary-light);
+      border-color: #c7d2fe;
+      color: var(--secondary);
+    }
+
+    .slide-badge.amber {
+      background: var(--amber-light);
+      border-color: var(--amber-border);
+      color: var(--amber);
+    }
+
+    .slide-title {
+      font-size: 2.1rem;
+      font-weight: 800;
+      line-height: 1.25;
+      color: var(--text);
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    .slide-subtitle {
+      font-size: 1.02rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 22px;
+      max-width: 900px;
+    }
+
+    /* Slide 1 - Research Question Box */
+    .rq-hero {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-left: 5px solid var(--primary);
+      border-radius: 16px;
+      padding: 36px 40px;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+      margin-top: 6px;
+    }
+
+    .rq-label {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--primary);
+      font-weight: 800;
+      margin-bottom: 14px;
+    }
+
+    .rq-text {
+      font-size: 1.6rem;
+      font-weight: 600;
+      line-height: 1.5;
+      color: #1e293b;
+      margin-bottom: 26px;
+    }
+
+    .rq-text span.keyword {
+      color: var(--primary);
+      font-weight: 700;
+      background: #eff6ff;
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid #dbeafe;
+    }
+
+    .rq-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .rq-tag {
+      font-size: 0.85rem;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 8px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rq-tag b {
+      color: var(--text);
+    }
+
+    /* Grid Layouts */
+    .card-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+    }
+
+    .card-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 24px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: #cbd5e1;
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid #bfdbfe;
+    }
+
+    .card-icon.sec {
+      background: var(--secondary-light);
+      color: var(--secondary);
+      border-color: #c7d2fe;
+    }
+
+    .card-icon.acc {
+      background: var(--accent-light);
+      color: var(--accent);
+      border-color: #a7f3d0;
+    }
+
+    .card-icon.amb {
+      background: var(--amber-light);
+      color: var(--amber);
+      border-color: var(--amber-border);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    /* Math Formula Display */
+    .math-formula {
+      display: inline-block;
+      font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", serif;
+      font-size: 1.05rem;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 4px 12px;
+      color: #0f172a;
+      margin: 6px 0 12px 0;
+      letter-spacing: 0.03em;
+    }
+
+    .math-formula sub {
+      font-size: 0.78em;
+      color: #334155;
+    }
+
+    .card p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-bottom: 10px;
+    }
+
+    .card-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 0.88rem;
+      margin-top: 6px;
+    }
+
+    .card-list li {
+      position: relative;
+      padding-left: 16px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .card-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: -1px;
+      color: var(--primary);
+      font-weight: bold;
+      font-size: 1.15rem;
+      line-height: 1.2;
+    }
+
+    /* Metric List Styling */
+    .metric-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .metric-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .metric-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1px solid #a7f3d0;
+      margin-top: 1px;
+    }
+
+    .math-sym {
+      font-family: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", serif;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.84rem;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    /* Literature & Research Gap */
+    .quote-box {
+      background: var(--amber-light);
+      border: 1px solid var(--amber-border);
+      border-left: 4px solid var(--amber);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-style: italic;
+      color: var(--amber-text);
+      font-size: 0.88rem;
+      line-height: 1.5;
+      margin-top: 6px;
+      margin-bottom: 10px;
+    }
+
+    .quote-author {
+      margin-top: 6px;
+      font-size: 0.78rem;
+      font-style: normal;
+      color: var(--amber);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    /* Footer & Controls */
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 40px;
+      border-top: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.02);
+      z-index: 40;
+    }
+
+    .dots-nav {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 9999px;
+      background: #cbd5e1;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .dot.active {
+      width: 32px;
+      background: var(--primary);
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .counter {
+      font-size: 0.85rem;
+      color: var(--text-light);
+      font-variant-numeric: tabular-nums;
+      margin-right: 12px;
+      font-weight: 600;
+    }
+
+    .btn {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      color: #334155;
+      font-family: inherit;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      color: var(--text);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+      color: #ffffff;
+    }
+
+    .kbd {
+      font-size: 0.7rem;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--text-light);
+      margin-left: 4px;
+    }
+
+    @media (max-width: 900px) {
+      .card-grid-2, .card-grid-3 {
+        grid-template-columns: 1fr;
+      }
+      .slide-title {
+        font-size: 1.55rem;
+      }
+      .rq-text {
+        font-size: 1.2rem;
+      }
+      main {
+        padding: 12px;
+      }
+      .slide {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Progress Bar -->
+  <div class="progress-bar-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-dot"></div>
+      Computational Intelligence Project
+    </div>
+    <div class="header-meta">
+      Decentralized Graph Search
+    </div>
+  </header>
+
+  <!-- Presentation Deck -->
+  <main>
+
+    <!-- Slide 1: Research Question -->
+    <section class="slide active" id="slide-0">
+      <div class="slide-badge">01 • Core Motivation</div>
+      <h1 class="slide-title">Decentralized Graph Search: Comparing Memory Types</h1>
+
+      <!-- Why Decentralized Graphs? Motivation Banner -->
+      <div style="background: #ffffff; border: 1px solid var(--border); border-left: 4px solid var(--secondary); border-radius: 12px; padding: 16px 22px; margin-bottom: 16px; box-shadow: var(--shadow-sm);">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+          <span style="font-size: 1rem;">🌐</span>
+          <span style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800; color: var(--secondary);">Why Decentralized Graphs?</span>
+        </div>
+        <p style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 10px;">
+          Graph search is traditionally framed from a <strong>centralized perspective with a global view</strong>, which is impractical in many real-world applications:
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 0.84rem; line-height: 1.45;">
+            <strong style="color: var(--text);">🔒 Privacy Concerns:</strong> In peer-to-peer networks, a centralized agent poses significant surveillance and privacy risks.
+          </div>
+          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: 0.84rem; line-height: 1.45;">
+            <strong style="color: var(--text);">⚡ Scalability Bottlenecks:</strong> Large graphs induce memory strain when storing global routing directories.
+          </div>
+        </div>
+      </div>
+
+      <div class="rq-hero" style="padding: 24px 30px; margin-top: 0;">
+        <div class="rq-label">
+          Research Question
+        </div>
+        <div class="rq-text" style="font-size: 1.45rem; line-height: 1.45; margin-bottom: 16px;">
+          Does <span class="keyword">sequential memory encoding</span> or <span class="keyword">set-based topological aggregation</span> better prevent action cycles and community trapping in decentralized graph navigation under <span class="keyword">partial local visibility</span>?
+        </div>
+      </div>
+      
+      <!-- Author & Course Info -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
+        <div style="display: inline-flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid var(--border-highlight); padding: 7px 16px; border-radius: 10px; font-size: 0.9rem; color: var(--text-muted); box-shadow: var(--shadow-sm);">
+          <span style="color: var(--primary);">👤</span>
+          <span>Author:</span>
+          <strong style="color: var(--text); font-weight: 700;">Bartłomiej Jucha</strong>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 2: Decentralized Search & Research Gap -->
+    <section class="slide" id="slide-1">
+      <div class="slide-badge secondary">02 • Foundations & Research Gap</div>
+      <h2 class="slide-title">Decentralized Graph Search & The Literature Gap</h2>
+      <p class="slide-subtitle">
+        Routing a message from source to target without a central coordinator or global map (Pisacane et al., LoG 2024), and the critical limitation of memory-less search.
+      </p>
+
+      <div class="card-grid-2">
+        <!-- Left: Foundational Paradigm & Anchor Paper -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">👁</div>
+            <div class="card-title">Anchor Paradigm (Pisacane et al., 2024)</div>
+          </div>
+          <p>
+            Decentralized search modeled as a collaborative <strong>Dec-POMDP</strong> without global network visibility:
+          </p>
+          <ul class="card-list">
+            <li><strong>1-Hop Local View:</strong> Agents only observe immediate neighbors and their connecting edges, preserving privacy and scalability.</li>
+            <li><strong>Message Forwarding:</strong> The current message holder inspects neighbor attributes and picks the next recipient hop-by-hop.</li>
+            <li><strong>Navigational Signals:</strong> Relies on node feature homophily and structural bridge hubs to guide decisions toward the destination.</li>
+          </ul>
+        </div>
+
+        <!-- Right: Identified Research Gap -->
+        <div class="card" style="border-color: var(--amber-border);">
+          <div class="card-header">
+            <div class="card-icon amb">⚠</div>
+            <div class="card-title" style="color: var(--amber);">Identified Research Gap</div>
+          </div>
+          <p>
+            The authors highlight a fundamental limitation in their concluding remarks:
+          </p>
+          <div class="quote-box">
+            "For simplicity, we have considered a memory-less search procedure that is akin to a biased random walk. This means that the agents cannot react to the unsuccessful exploration of a given region [...] and the same distribution over actions will apply independently of the historical trajectory."
+            <div class="quote-author">— Pisacane et al. (2024), Sec. 6 Future Work</div>
+          </div>
+          <p style="margin-top: 10px; font-size: 0.88rem; color: #1e3a8a; font-weight: 600; background: #eff6ff; padding: 8px 12px; border-radius: 6px; border: 1px solid #bfdbfe;">
+            👉 The Core Question: How can the traveling message carry a memory of visited history to break these trapping cycles?
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 3: Addressing The Gap & Proposed Memory Types -->
+    <section class="slide" id="slide-2">
+      <div class="slide-badge amber">03 • Proposed Memory Types</div>
+      <h2 class="slide-title">Addressing The Gap: Comparing Memory Types</h2>
+      <p class="slide-subtitle">
+        To prevent agents from getting stuck in dead ends or cycling in dense communities, <strong>I let the traveling message carry a "memory"</strong> of where it has already been, comparing two distinct paradigms:
+      </p>
+
+      <div class="card-grid-2">
+        <!-- Order-based Memory -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">↳</div>
+            <div class="card-title">Order-Based Memory</div>
+          </div>
+          <p>
+            <strong>Sequential Trajectory:</strong> Remembers the exact chronological sequence of steps taken along the path.
+          </p>
+          <div>
+            <div class="math-formula">(v<sub>1</sub> &rarr; v<sub>2</sub> &rarr; &hellip; &rarr; v<sub>t</sub>)</div>
+          </div>
+          <ul class="card-list">
+            <li>Encodes traversal direction, velocity, and immediate backtracking.</li>
+            <li>Detects localized loops and sequence-dependent ping-pong patterns.</li>
+            <li>Sensitive to step order and temporal recency.</li>
+          </ul>
+        </div>
+
+        <!-- Coverage-based Memory -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">⊚</div>
+            <div class="card-title">Coverage-Based Memory</div>
+          </div>
+          <p>
+            <strong>Coverage / Topological Set:</strong> Remembers all visited nodes as an unordered group, focusing on which areas have already been explored.
+          </p>
+          <div>
+            <div class="math-formula">{v<sub>i</sub> &isin; V<sub>visited</sub>}</div>
+          </div>
+          <ul class="card-list">
+            <li>Emphasizes which clusters and neighborhoods are already exhausted.</li>
+            <li>Permutation-invariant aggregation across visited subgraphs.</li>
+            <li>Prevents wandering back into previously explored community traps.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Slide 4: Data & Environment Setup -->
+    <section class="slide" id="slide-3">
+      <div class="slide-badge accent">04 • Experimental Setup</div>
+      <h2 class="slide-title">Environment, Data & Evaluation Metrics</h2>
+      <p class="slide-subtitle">
+        Empirical framework and quantitative metrics designed to stress-test memory mechanisms against topological bottlenecks and local minima.
+      </p>
+
+      <div class="card-grid-3">
+        <!-- Environment -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">🕸</div>
+            <div class="card-title">Simulation Environment</div>
+          </div>
+          <ul class="card-list">
+            <li><strong>Dec-POMDP Setup:</strong> Simulates decentralized routing with strictly 1-hop ego-neighborhood observability.</li>
+            <li><strong>Episode Execution:</strong> Passes message hop-by-hop until reaching target or exceeding truncation limit <i>T</i><sub>max</sub>.</li>
+            <li><strong>Decentralized Constraint:</strong> Preserves node privacy without global maps, coordinates, or precomputed tables.</li>
+          </ul>
+        </div>
+
+        <!-- Datasets -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">📊</div>
+            <div class="card-title">Network Topologies</div>
+          </div>
+          <ul class="card-list">
+            <li><strong>Computer-Generated Networks:</strong> Synthetic graphs with adjustable cluster modularity and densities to systematically induce trapping.</li>
+            <li><strong>Real Social Networks:</strong> Real Facebook friendship graphs (100–600 nodes) with actual user profile attributes.</li>
+          </ul>
+        </div>
+
+        <!-- Model Evaluation & Selection -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon acc">📈</div>
+            <div class="card-title">Model Evaluation & Selection</div>
+          </div>
+          <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
+            For evaluating models, we consider the following metrics:
+          </p>
+          <div class="metric-list">
+            <div class="metric-item">
+              <span class="metric-num">1</span>
+              <div>
+                <strong>Mean Oracle Ratio</strong> <span class="math-sym"><span style="text-decoration: overline;">R</span><sub>oracle</sub></span>: the ratio between episode length and the shortest path length averaged over all source-destination pairs;
+              </div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num">2</span>
+              <div>
+                <strong>Truncation Rate</strong> <span class="math-sym">R<sub>trunc</sub></span>: % of episodes exceeding the truncation length <span class="math-sym">T<sub>max</sub></span>;
+              </div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num">3</span>
+              <div>
+                <strong>Win Rate</strong> <span class="math-sym">R<sub>win</sub></span>: % of episodes where a given agent obtains the relative shortest path length, with ties broken randomly.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer Navigation -->
+  <footer>
+    <div class="dots-nav" id="dotsContainer">
+      <div class="dot active" onclick="goToSlide(0)"></div>
+      <div class="dot" onclick="goToSlide(1)"></div>
+      <div class="dot" onclick="goToSlide(2)"></div>
+      <div class="dot" onclick="goToSlide(3)"></div>
+    </div>
+
+    <div class="controls">
+      <span class="counter" id="slideCounter">01 / 04</span>
+      <button class="btn" id="prevBtn" onclick="prevSlide()" disabled>
+        ← Prev <span class="kbd">Left</span>
+      </button>
+      <button class="btn btn-primary" id="nextBtn" onclick="nextSlide()">
+        Next → <span class="kbd">Right</span>
+      </button>
+      <button class="btn" onclick="toggleFullscreen()" title="Toggle Fullscreen">
+        ⛶
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const dots = document.querySelectorAll('.dot');
+    const counter = document.getElementById('slideCounter');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const progressBar = document.getElementById('progressBar');
+
+    let currentSlide = 0;
+    const totalSlides = slides.length;
+
+    function updateSlide() {
+      slides.forEach((slide, idx) => {
+        slide.classList.remove('active', 'previous');
+        if (idx === currentSlide) {
+          slide.classList.add('active');
+        } else if (idx < currentSlide) {
+          slide.classList.add('previous');
+        }
+      });
+
+      dots.forEach((dot, idx) => {
+        dot.classList.toggle('active', idx === currentSlide);
+      });
+
+      counter.textContent = String(currentSlide + 1).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+      progressBar.style.width = ((currentSlide + 1) / totalSlides * 100) + '%';
+
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === totalSlides - 1;
+      if (currentSlide === totalSlides - 1) {
+        nextBtn.classList.remove('btn-primary');
+      } else {
+        nextBtn.classList.add('btn-primary');
+      }
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    function goToSlide(index) {
+      if (index >= 0 && index < totalSlides) {
+        currentSlide = index;
+        updateSlide();
+      }
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.log(err));
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // Keyboard navigation
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        goToSlide(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        goToSlide(totalSlides - 1);
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+    });
+
+    updateSlide();
+  </script>
+</body>
+</html>

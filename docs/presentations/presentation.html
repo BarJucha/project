@@ -1,0 +1,1924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Decentralized Graph Navigation: Preventing Action Cycles &amp; Community Trapping</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-card: #ffffff;
+      --surface-muted: #f1f5f9;
+      --border: #e2e8f0;
+      --border-highlight: #bfdbfe;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --text-light: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --secondary: #6366f1;
+      --secondary-light: #eef2ff;
+      --accent: #059669;
+      --accent-light: #ecfdf5;
+      --accent-border: #a7f3d0;
+      --amber: #d97706;
+      --amber-light: #fffbeb;
+      --amber-border: #fde68a;
+      --amber-text: #78350f;
+      --rose: #e11d48;
+      --rose-light: #fff1f2;
+      --rose-border: #fecdd3;
+      --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --math-font: "Cambria Math", "Latin Modern Math", "STIX Two Math", "Georgia", serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Progress Bar */
+    .progress-bar-container {
+      width: 100%;
+      height: 4px;
+      background: #e2e8f0;
+      position: relative;
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 9%;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      transition: width 0.35s ease;
+    }
+
+    body.no-transitions *, body.no-transitions {
+      transition: none !important;
+    }
+
+    /* Header Bar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 36px;
+      border-bottom: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: var(--shadow-sm);
+      z-index: 40;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+    }
+
+    .header-meta {
+      font-size: 0.82rem;
+      color: var(--text-light);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-section-tag {
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      border-radius: 999px;
+      color: var(--text-muted);
+      font-size: 0.74rem;
+      font-weight: 600;
+    }
+
+    /* Main Deck Stage */
+    main {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 12px 38px;
+      opacity: 0;
+      pointer-events: none;
+      overflow-y: auto;
+      outline: none;
+      transform: translateX(32px) scale(0.99);
+      transition: opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .slide:focus, .slide:focus-visible {
+      outline: none;
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0) scale(1);
+    }
+
+    .slide.previous {
+      transform: translateX(-32px) scale(0.99);
+    }
+
+    /* Badges & Titles */
+    .slide-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 11px;
+      background: var(--primary-light);
+      border: 1px solid var(--border-highlight);
+      border-radius: 9999px;
+      color: var(--primary);
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      width: fit-content;
+    }
+
+    .slide-badge.accent {
+      background: var(--accent-light);
+      border-color: var(--accent-border);
+      color: var(--accent);
+    }
+
+    .slide-badge.secondary {
+      background: var(--secondary-light);
+      border-color: #c7d2fe;
+      color: var(--secondary);
+    }
+
+    .slide-badge.amber {
+      background: var(--amber-light);
+      border-color: var(--amber-border);
+      color: var(--amber);
+    }
+
+    .slide-badge.rose {
+      background: var(--rose-light);
+      border-color: var(--rose-border);
+      color: var(--rose);
+    }
+
+    .slide-title {
+      font-size: 1.72rem;
+      font-weight: 800;
+      line-height: 1.18;
+      color: var(--text);
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .slide-subtitle {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.44;
+      margin-bottom: 11px;
+      max-width: 980px;
+    }
+
+    /* Hero Boxes */
+    .rq-hero {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-left: 5px solid var(--primary);
+      border-radius: 14px;
+      padding: 13px 22px;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+    }
+
+    .rq-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--primary);
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+
+    .rq-text {
+      font-size: 1.16rem;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #1e293b;
+    }
+
+    .rq-text span.keyword {
+      color: var(--primary);
+      font-weight: 700;
+      background: var(--primary-light);
+      padding: 1px 7px;
+      border-radius: 6px;
+      border: 1px solid #dbeafe;
+    }
+
+    /* Grids */
+    .card-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .card-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .card-grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .grid-split-wide {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 18px;
+    }
+
+    .grid-split-right-wide {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .card:hover {
+      border-color: #cbd5e1;
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .card-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.98rem;
+      font-weight: 700;
+      background: var(--primary-light);
+      color: var(--primary);
+      border: 1px solid #bfdbfe;
+      flex-shrink: 0;
+    }
+
+    .card-icon.sec {
+      background: var(--secondary-light);
+      color: var(--secondary);
+      border-color: #c7d2fe;
+    }
+
+    .card-icon.acc {
+      background: var(--accent-light);
+      color: var(--accent);
+      border-color: var(--accent-border);
+    }
+
+    .card-icon.amb {
+      background: var(--amber-light);
+      color: var(--amber);
+      border-color: var(--amber-border);
+    }
+
+    .card-icon.rose {
+      background: var(--rose-light);
+      color: var(--rose);
+      border-color: var(--rose-border);
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.48;
+      margin-bottom: 8px;
+    }
+
+    .card p:last-child {
+      margin-bottom: 0;
+    }
+
+    .card-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: 0.84rem;
+    }
+
+    .card-list li {
+      position: relative;
+      padding-left: 15px;
+      color: var(--text-muted);
+      line-height: 1.42;
+    }
+
+    .card-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      top: -1px;
+      color: var(--primary);
+      font-weight: bold;
+      font-size: 1.1rem;
+      line-height: 1.2;
+    }
+
+    .card-list.sec li::before { color: var(--secondary); }
+    .card-list.acc li::before { color: var(--accent); }
+    .card-list.amb li::before { color: var(--amber); }
+    .card-list.rose li::before { color: var(--rose); }
+
+    .card-list li strong {
+      color: var(--text);
+    }
+
+    /* Math & Code Pills */
+    .math-formula {
+      display: inline-block;
+      font-family: var(--math-font);
+      font-size: 0.96rem;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 4px 10px;
+      color: #0f172a;
+      margin: 4px 0 8px 0;
+      letter-spacing: 0.02em;
+    }
+
+    .math-sym {
+      display: inline-block;
+      font-family: var(--math-font);
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      padding: 2px 6px;
+      font-size: 0.82rem;
+      line-height: 1.25;
+      color: #0f172a;
+      white-space: nowrap;
+      vertical-align: baseline;
+    }
+
+    .math-sym sub,
+    .math-sym sup {
+      font-size: 0.72em;
+      line-height: 1;
+    }
+
+    .math-sym sup {
+      vertical-align: 0.34em;
+    }
+
+    .math-sym sub {
+      vertical-align: -0.2em;
+    }
+
+    /* Callout Banners & Quotes */
+    .quote-box {
+      background: var(--amber-light);
+      border: 1px solid var(--amber-border);
+      border-left: 4px solid var(--amber);
+      border-radius: 10px;
+      padding: 11px 15px;
+      font-style: italic;
+      color: var(--amber-text);
+      font-size: 0.83rem;
+      line-height: 1.45;
+      margin: 6px 0;
+    }
+
+    .quote-author {
+      margin-top: 4px;
+      font-size: 0.74rem;
+      font-style: normal;
+      color: var(--amber);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .takeaway-bar {
+      margin-top: 9px;
+      background: var(--primary-light);
+      border: 1px solid var(--border-highlight);
+      border-left: 4px solid var(--primary);
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 0.83rem;
+      color: #1e3a8a;
+      line-height: 1.38;
+    }
+
+    .takeaway-bar.sec {
+      background: var(--secondary-light);
+      border-color: #c7d2fe;
+      border-left-color: var(--secondary);
+      color: #312e81;
+    }
+
+    .takeaway-bar.acc {
+      background: var(--accent-light);
+      border-color: var(--accent-border);
+      border-left-color: var(--accent);
+      color: #064e3b;
+    }
+
+    .takeaway-bar.amb {
+      background: var(--amber-light);
+      border-color: var(--amber-border);
+      border-left-color: var(--amber);
+      color: var(--amber-text);
+    }
+
+    /* Tables */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.79rem;
+      background: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .data-table th {
+      background: #f1f5f9;
+      color: var(--text);
+      font-weight: 700;
+      text-align: left;
+      padding: 7px 9px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table th.num, .data-table td.num {
+      text-align: center;
+    }
+
+    .data-table td {
+      padding: 6px 9px;
+      border-bottom: 1px solid #f1f5f9;
+      color: var(--text-muted);
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table td.best {
+      color: var(--primary);
+      font-weight: 700;
+      background: #eff6ff;
+    }
+
+    .data-table td.warn {
+      color: var(--amber);
+      font-weight: 700;
+      background: var(--amber-light);
+    }
+
+    /* Stat Pills */
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 6px 0 10px 0;
+    }
+
+    .stat-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+
+    .stat-val {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--primary);
+      line-height: 1.15;
+    }
+
+    .stat-val.sec { color: var(--secondary); }
+    .stat-val.acc { color: var(--accent); }
+    .stat-val.amb { color: var(--amber); }
+
+    .stat-lbl {
+      font-size: 0.72rem;
+      color: var(--text-light);
+      font-weight: 600;
+      margin-top: 3px;
+      line-height: 1.25;
+    }
+
+    /* Metric List */
+    .metric-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .metric-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      font-size: 0.81rem;
+      color: var(--text-muted);
+      line-height: 1.38;
+    }
+
+    .metric-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.74rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1px solid var(--accent-border);
+      margin-top: 1px;
+    }
+
+    /* SVG Diagram Containers */
+    .diagram-wrap {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .diagram-wrap svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Author Tag */
+    .meta-pills {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .meta-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 10px;
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .meta-pill strong {
+      color: var(--text);
+    }
+
+    /* Footer & Controls */
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 36px;
+      border-top: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.02);
+      z-index: 40;
+      flex-shrink: 0;
+    }
+
+    .dots-nav {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 9999px;
+      background: #cbd5e1;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .dot:hover {
+      background: #94a3b8;
+    }
+
+    .dot.active {
+      width: 28px;
+      background: var(--primary);
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .counter {
+      font-size: 0.84rem;
+      color: var(--text-light);
+      font-variant-numeric: tabular-nums;
+      margin-right: 8px;
+      font-weight: 600;
+    }
+
+    .btn {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      color: #334155;
+      font-family: inherit;
+      padding: 7px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.83rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      color: var(--text);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+      color: #ffffff;
+    }
+
+    .kbd {
+      font-size: 0.68rem;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      padding: 1px 5px;
+      border-radius: 4px;
+      margin-left: 2px;
+    }
+
+    @media (max-width: 960px) {
+      .card-grid-2, .card-grid-3, .card-grid-4,
+      .grid-split-wide, .grid-split-right-wide {
+        grid-template-columns: 1fr;
+      }
+      .slide {
+        padding: 16px 20px;
+        justify-content: flex-start;
+      }
+      .slide-title {
+        font-size: 1.45rem;
+      }
+      .rq-text {
+        font-size: 1.12rem;
+      }
+      header, footer {
+        padding: 10px 18px;
+      }
+    }
+
+    @media print {
+      body {
+        height: auto;
+        overflow: visible;
+        background: #ffffff;
+      }
+      .progress-bar-container, footer {
+        display: none;
+      }
+      main {
+        display: block;
+        overflow: visible;
+      }
+      .slide {
+        position: static;
+        opacity: 1 !important;
+        pointer-events: auto;
+        transform: none !important;
+        page-break-after: always;
+        min-height: 95vh;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Progress Bar -->
+  <div class="progress-bar-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-dot"></div>
+      Computational Intelligence Project
+    </div>
+    <div class="header-meta">
+      <span class="header-section-tag" id="sectionTag">1. Motivation</span>
+      <span>Decentralized Graph Navigation</span>
+    </div>
+  </header>
+
+  <!-- Presentation Deck -->
+  <main>
+
+    <!-- SLIDE 1: Title & Motivation (1/2) -->
+    <section class="slide active" id="slide-0" data-section="1. Motivation">
+      <div class="slide-badge">01 • Title &amp; Motivation</div>
+      <h1 class="slide-title">Decentralized Graph Navigation:<br>Preventing Action Cycles &amp; Community Trapping</h1>
+      <p class="slide-subtitle">
+        How can autonomous agents forward messages across complex networks using strictly local observations without getting trapped?
+      </p>
+
+      <div class="card-grid-2">
+        <!-- Centralized Failures -->
+        <div class="card" style="border-left: 4px solid var(--rose);">
+          <div class="card-header">
+            <div class="card-icon rose">✕</div>
+            <div class="card-title">Why Centralized Search Fails in Practice</div>
+          </div>
+          <p>
+            Classical shortest-path algorithms assume a complete global connectivity map-an assumption that breaks down in real-world networks:
+          </p>
+          <ul class="card-list rose">
+            <li><strong>Privacy Restrictions:</strong> Peer-to-Peer (P2P) systems and social graphs forbid centralizing user connections.</li>
+            <li><strong>Dynamic Topologies:</strong> Mobile ad-hoc and Internet of Things (IoT) networks change faster than global maps can sync.</li>
+            <li><strong>Memory Bottlenecks:</strong> Storing global routing tables does not scale to massive graphs.</li>
+          </ul>
+        </div>
+
+        <!-- Decentralized Reality -->
+        <div class="card" style="border-left: 4px solid var(--primary);">
+          <div class="card-header">
+            <div class="card-icon">🌐</div>
+            <div class="card-title">The Decentralized Routing Paradigm</div>
+          </div>
+          <p>
+            Inspired by <strong>Milgram's small-world routing</strong>, nodes forward a message hop-by-hop with zero global visibility:
+          </p>
+          <ul class="card-list">
+            <li><strong>1-Hop Local Visibility:</strong> Each node inspects only its immediate 1-hop ego-neighborhood and target attributes.</li>
+            <li><strong>Privacy &amp; Scalability:</strong> Requires zero global coordinates, central servers, or precomputed routing directories.</li>
+            <li><strong>The Fundamental Dilemma:</strong> Without a global map or past memory, local decisions trigger <strong>loops &amp; cluster traps</strong>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="meta-pills">
+        <div class="meta-pill"><span>👤</span> <span>Author:</span> <strong>Bartłomiej Jucha</strong></div>
+        <div class="meta-pill"><span>🎯</span> <span>Focus:</span> <strong>Memory Representations under Partial Observability</strong></div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: Motivation — Local Signals & Failure Modes (2/2) -->
+    <section class="slide" id="slide-1" data-section="1. Motivation">
+      <div class="slide-badge">02 • Problem Intuition</div>
+      <h2 class="slide-title">Local Navigational Signals vs. Partial-Observability Traps</h2>
+      <p class="slide-subtitle">
+        Decentralized walkers rely on structural cues to reach distant targets—but those same structures create topological traps when agents lack history.
+      </p>
+
+      <div class="grid-split-right-wide">
+        <!-- Left: Signals -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">🧭</div>
+            <div class="card-title">How Local Routing Works</div>
+          </div>
+          <ul class="card-list sec">
+            <li>
+              <strong>Network Homophily:</strong> Nodes with similar attributes tend to connect directly—allowing greedy attribute similarity toward the target.
+            </li>
+            <li>
+              <strong>Structural Heterogeneity:</strong> Networks organize into dense local communities linked by sparse <em>weak ties</em> and high-degree <em>hubs</em>.
+            </li>
+            <li>
+              <strong>The Critical Bottleneck:</strong> Reaching an unknown community requires crossing a narrow bridge tie. A walker attracted purely to local similarity repeatedly loops inside dead-end clusters.
+            </li>
+          </ul>
+        </div>
+
+        <!-- Right: SVG Diagram of Action Cycles & Community Trapping -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon amb">⚠</div>
+            <div class="card-title">Two Primary Failure Modes</div>
+          </div>
+          <div class="diagram-wrap" style="padding: 8px; flex: 1;">
+            <svg viewBox="0 0 520 265" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Action cycles and community trapping diagram">
+              <defs>
+                <marker id="arrowBlue" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                  <polygon points="0 0, 7 3.5, 0 7" fill="#2563eb"/>
+                </marker>
+                <marker id="arrowAmber" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                  <polygon points="0 0, 7 3.5, 0 7" fill="#d97706"/>
+                </marker>
+                <marker id="arrowRose" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                  <polygon points="0 0, 7 3.5, 0 7" fill="#e11d48"/>
+                </marker>
+              </defs>
+
+              <!-- Panel A: Ping-Pong Action Cycle -->
+              <rect x="8" y="8" width="242" height="248" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+              <text x="22" y="30" font-size="12" font-weight="700" fill="#e11d48">A. Action Cycle</text>
+              <text x="22" y="46" font-size="10" fill="#64748b">Identical local state repeats same hop</text>
+
+              <!-- Edges -->
+              <line x1="65" y1="135" x2="125" y2="135" stroke="#cbd5e1" stroke-width="2"/>
+              <line x1="125" y1="135" x2="195" y2="85" stroke="#cbd5e1" stroke-width="1.8" stroke-dasharray="4 3"/>
+              <line x1="125" y1="135" x2="195" y2="185" stroke="#cbd5e1" stroke-width="1.8" stroke-dasharray="4 3"/>
+
+              <!-- Ping-Pong Arrows -->
+              <path d="M 73 122 Q 95 102 117 122" fill="none" stroke="#e11d48" stroke-width="2.2" marker-end="url(#arrowRose)"/>
+              <path d="M 117 148 Q 95 168 73 148" fill="none" stroke="#e11d48" stroke-width="2.2" marker-end="url(#arrowRose)"/>
+
+              <!-- Nodes -->
+              <circle cx="65" cy="135" r="16" fill="#fff1f2" stroke="#e11d48" stroke-width="2"/>
+              <text x="65" y="139" text-anchor="middle" font-size="11" font-weight="700" fill="#9f1239">u</text>
+
+              <circle cx="125" cy="135" r="16" fill="#fff1f2" stroke="#e11d48" stroke-width="2"/>
+              <text x="125" y="139" text-anchor="middle" font-size="11" font-weight="700" fill="#9f1239">v</text>
+
+              <circle cx="195" cy="85" r="13" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+              <text x="195" y="89" text-anchor="middle" font-size="10" fill="#475569">w₁</text>
+
+              <circle cx="212" cy="185" r="17" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+              <text x="212" y="189" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">u_tgt</text>
+
+              <rect x="24" y="205" width="210" height="36" rx="7" fill="#fff1f2" stroke="#fecdd3"/>
+              <text x="129" y="221" text-anchor="middle" font-size="10" font-weight="600" fill="#9f1239">u → v → u → v ... until T_max = 100</text>
+              <text x="129" y="234" text-anchor="middle" font-size="9.5" fill="#be123c">No awareness of previous hop</text>
+
+              <!-- Panel B: Community Trapping -->
+              <rect x="266" y="8" width="246" height="248" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+              <text x="280" y="30" font-size="12" font-weight="700" fill="#d97706">B. Dense Community Trapping</text>
+              <text x="280" y="46" font-size="10" fill="#64748b">Re-visiting local cluster</text>
+
+              <!-- Cluster Boundary -->
+              <ellipse cx="348" cy="135" rx="64" ry="52" fill="#fffbeb" stroke="#fde68a" stroke-width="1.8" stroke-dasharray="5 3"/>
+              <text x="348" y="76" text-anchor="middle" font-size="9.5" font-weight="700" fill="#b45309">Exhausted Cluster</text>
+
+              <!-- Cluster Edges -->
+              <line x1="312" y1="120" x2="348" y2="105" stroke="#fcd34d" stroke-width="1.6"/>
+              <line x1="348" y1="105" x2="386" y2="128" stroke="#fcd34d" stroke-width="1.6"/>
+              <line x1="386" y1="128" x2="352" y2="162" stroke="#fcd34d" stroke-width="1.6"/>
+              <line x1="352" y1="162" x2="312" y2="120" stroke="#fcd34d" stroke-width="1.6"/>
+              <line x1="312" y1="120" x2="386" y2="128" stroke="#fcd34d" stroke-width="1.6"/>
+
+              <!-- Bridge Tie -->
+              <line x1="386" y1="128" x2="468" y2="135" stroke="#2563eb" stroke-width="2" stroke-dasharray="4 3"/>
+              <text x="427" y="121" text-anchor="middle" font-size="9" font-weight="700" fill="#2563eb">Weak Tie</text>
+
+              <!-- Trap cycle arrow -->
+              <path d="M 323 114 Q 348 92 374 118" fill="none" stroke="#d97706" stroke-width="2" marker-end="url(#arrowAmber)"/>
+              <path d="M 378 140 Q 354 166 322 136" fill="none" stroke="#d97706" stroke-width="2" marker-end="url(#arrowAmber)"/>
+
+              <!-- Cluster Nodes -->
+              <circle cx="312" cy="120" r="11" fill="#fef3c7" stroke="#d97706" stroke-width="1.8"/>
+              <circle cx="348" cy="105" r="11" fill="#fef3c7" stroke="#d97706" stroke-width="1.8"/>
+              <circle cx="352" cy="162" r="11" fill="#fef3c7" stroke="#d97706" stroke-width="1.8"/>
+              <circle cx="386" cy="128" r="13" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+              <text x="386" y="132" text-anchor="middle" font-size="9" font-weight="700" fill="#1d4ed8">hub</text>
+
+              <!-- Target -->
+              <circle cx="476" cy="135" r="17" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+              <text x="476" y="139" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">u_tgt</text>
+
+              <rect x="280" y="205" width="218" height="36" rx="7" fill="#fffbeb" stroke="#fde68a"/>
+              <text x="389" y="221" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">Walker orbits same dense subgraph</text>
+              <text x="389" y="234" text-anchor="middle" font-size="9.5" fill="#b45309">Misses bridge exit to target cluster</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: Paper 1 — GARDEN Formulation & Architecture (1/2) -->
+    <section class="slide" id="slide-2" data-section="2. Foundational Paper">
+      <div class="slide-badge secondary">03 • Foundational Paper (1 / 2)</div>
+      <h2 class="slide-title">Reinforcement Learning for Decentralized Graph Path Search</h2>
+      <p class="slide-subtitle">
+        <em>"Reinforcement Learning Discovers Efficient Decentralized Graph Path Search Strategies"</em> — Pisacane, Darvariu &amp; Musolesi (Learning on Graphs (LoG) 2024), introducing <strong>Graph Attention-guided Routing for DEcentralised Networks (GARDEN)</strong>
+      </p>
+
+      <!-- 3 Core Pillars -->
+      <div class="card-grid-3" style="margin-bottom: 14px;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">1</div>
+            <div class="card-title">Problem Formulation</div>
+          </div>
+          <ul class="card-list">
+            <li><strong>Decentralized Partially Observable Markov Decision Process (Dec-POMDP):</strong> Each node hosts an autonomous agent with feature vector <span class="math-sym">x<sub>u</sub></span>.</li>
+            <li><strong>1-Hop Observations:</strong> Message holder inspects neighbor ego-subgraphs <span class="math-sym">G<sub>u'</sub></span> + target subgraph <span class="math-sym">G<sub>u_tgt</sub></span>.</li>
+            <li><strong>Sparse Terminal Reward:</strong> <span class="math-sym">+1</span> on target arrival; truncated at <span class="math-sym">T<sub>max</sub> = 100</span> (<span class="math-sym">0</span> reward).</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">2</div>
+            <div class="card-title">Training Paradigm</div>
+          </div>
+          <ul class="card-list sec">
+            <li><strong>Centralized Training with Decentralized Execution (CTDE):</strong> Agents share parameters globally during training, then act independently using local observations.</li>
+            <li><strong>Advantage Actor-Critic (A2C):</strong> Reinforcement Learning (RL) policy &amp; value Multi-Layer Perceptrons (MLPs) trained end-to-end.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon acc">3</div>
+            <div class="card-title">GARDEN Encoder</div>
+          </div>
+          <ul class="card-list acc">
+            <li><strong>Learned Neighborhood Embeddings:</strong> Replaces raw attributes with topology-aware continuous representations.</li>
+            <li><strong>3-Layer Graph Attention Network (GAT):</strong> Encodes 1-hop neighborhoods into continuous vectors <span class="math-sym">x<sub>u</sub><sup>GAT</sup></span>.</li>
+            <li><strong>Hidden Metric Space:</strong> Aligns attributes and connectivity to approximate latent shortest-path geometry.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Architecture Pipeline SVG -->
+      <div class="diagram-wrap" style="background: #ffffff; padding: 8px 16px;">
+        <svg viewBox="0 0 920 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GARDEN architecture flow">
+          <defs>
+            <marker id="arrP" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <polygon points="0 0, 7 3.5, 0 7" fill="#2563eb"/>
+            </marker>
+          </defs>
+          <!-- Box 1 -->
+          <rect x="8" y="8" width="215" height="80" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+          <text x="115" y="30" text-anchor="middle" font-size="12" font-weight="700" fill="#1e3a8a">Local 1-Hop Ego-Graphs</text>
+          <text x="115" y="49" text-anchor="middle" font-size="10.5" fill="#475569">Subgraphs G<tspan baseline-shift="sub" font-size="78%">u'</tspan> for u' ∈ N(u)</text>
+          <text x="115" y="68" text-anchor="middle" font-size="10.5" fill="#475569">+ Target Subgraph G<tspan baseline-shift="sub" font-size="78%">tgt</tspan></text>
+
+          <line x1="228" y1="48" x2="264" y2="48" stroke="#2563eb" stroke-width="2.2" marker-end="url(#arrP)"/>
+
+          <!-- Box 2 -->
+          <rect x="270" y="8" width="205" height="80" rx="10" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>
+          <text x="372" y="30" text-anchor="middle" font-size="12" font-weight="700" fill="#312e81">3-Layer GAT Encoder</text>
+          <text x="372" y="49" text-anchor="middle" font-size="10.5" fill="#475569">64 hidden dim, 1 attention head</text>
+          <text x="372" y="68" text-anchor="middle" font-size="10.5" font-weight="600" fill="#4338ca">Outputs x<tspan baseline-shift="sub" font-size="78%">u</tspan><tspan baseline-shift="super" font-size="75%">GAT</tspan> ∈ ℝ<tspan baseline-shift="super" font-size="75%">64</tspan></text>
+
+          <line x1="480" y1="48" x2="516" y2="48" stroke="#2563eb" stroke-width="2.2" marker-end="url(#arrP)"/>
+
+          <!-- Box 3 -->
+          <rect x="522" y="8" width="225" height="80" rx="10" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+          <text x="634" y="30" text-anchor="middle" font-size="12" font-weight="700" fill="#065f46">A2C Actor &amp; Critic MLPs</text>
+          <text x="634" y="49" text-anchor="middle" font-size="10.5" fill="#475569">Input: [ x<tspan baseline-shift="sub" font-size="78%">u'</tspan><tspan baseline-shift="super" font-size="75%">GAT</tspan> ∥ x<tspan baseline-shift="sub" font-size="78%">tgt</tspan><tspan baseline-shift="super" font-size="75%">GAT</tspan> ]</text>
+          <text x="634" y="68" text-anchor="middle" font-size="10.5" fill="#047857">SoftMax policy π(a<tspan baseline-shift="sub" font-size="78%">u→u'</tspan> | O)</text>
+
+          <line x1="752" y1="48" x2="788" y2="48" stroke="#2563eb" stroke-width="2.2" marker-end="url(#arrP)"/>
+
+          <!-- Box 4 -->
+          <rect x="794" y="14" width="118" height="68" rx="10" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+          <text x="853" y="37" text-anchor="middle" font-size="11.5" font-weight="700" fill="#92400e">Forward Packet</text>
+          <text x="853" y="55" text-anchor="middle" font-size="10.5" font-weight="700" fill="#b45309">m = x<tspan baseline-shift="sub" font-size="78%">tgt</tspan><tspan baseline-shift="super" font-size="75%">GAT</tspan></text>
+          <text x="853" y="71" text-anchor="middle" font-size="9.5" fill="#b45309">(No History!)</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: Paper 1 — GARDEN Empirical Results & Takeaways (2/2) -->
+    <section class="slide" id="slide-3" data-section="2. Foundational Paper">
+      <div class="slide-badge secondary">04 • Foundational Paper (2 / 2)</div>
+      <h2 class="slide-title">GARDEN: Empirical Performance &amp; Critical Warning Sign</h2>
+      <p class="slide-subtitle">
+        Evaluated on 5 Stanford Network Analysis Project (SNAP) Facebook ego-networks (148–532 nodes) and synthetic spatial graphs against heuristic and MLP RL baselines.
+      </p>
+
+      <div class="grid-split-wide">
+        <!-- Left: Facebook Results Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">📊</div>
+            <div class="card-title">SNAP Facebook Ego-Networks (GARDEN vs. Best Heuristic)</div>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Graph (Nodes)</th>
+                <th class="num">Metric</th>
+                <th class="num">GreedyWalker</th>
+                <th class="num">DistanceWalker</th>
+                <th class="num">GARDEN (Ours)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Facebook 1</strong> (148)</td>
+                <td class="num">R̄<sub>oracle</sub> ↓ / R<sub>trunc</sub> ↓</td>
+                <td class="num">27.2 / 79.0%</td>
+                <td class="num">16.0 / 39.7%</td>
+                <td class="num best">10.95 / 14.9%</td>
+              </tr>
+              <tr>
+                <td><strong>Facebook 2</strong> (168)</td>
+                <td class="num">R̄<sub>oracle</sub> ↓ / R<sub>trunc</sub> ↓</td>
+                <td class="num">31.8 / 78.0%</td>
+                <td class="num">13.0 / 19.5%</td>
+                <td class="num best">9.89 / 12.6%</td>
+              </tr>
+              <tr>
+                <td><strong>Facebook 3</strong> (224)</td>
+                <td class="num">R̄<sub>oracle</sub> ↓ / R<sub>trunc</sub> ↓</td>
+                <td class="num">27.4 / 70.0%</td>
+                <td class="num">9.99 / 13.9%</td>
+                <td class="num best">8.74 / 13.5%</td>
+              </tr>
+              <tr>
+                <td><strong>Facebook 4</strong> (324)</td>
+                <td class="num">R̄<sub>oracle</sub> ↓ / R<sub>trunc</sub> ↓</td>
+                <td class="num">25.7 / 88.0%</td>
+                <td class="num">14.3 / 44.0%</td>
+                <td class="num warn">12.08 / 40.1%</td>
+              </tr>
+              <tr>
+                <td><strong>Facebook 5</strong> (532)</td>
+                <td class="num">R̄<sub>oracle</sub> ↓ / R<sub>trunc</sub> ↓</td>
+                <td class="num">28.3 / 96.0%</td>
+                <td class="num">22.7 / 72.7%</td>
+                <td class="num warn">16.97 / 48.2%</td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="margin-top: 8px; font-size: 0.8rem;">
+            <strong>Win Rate (R<sub>win</sub>):</strong> GARDEN achieves the shortest decentralized path in <strong>48.3%–60.7%</strong> of episodes across all 5 graphs, with fast Central Processing Unit (CPU) inference (<strong>0.15–0.18 ms/step</strong>).
+          </p>
+        </div>
+
+        <!-- Right: Ablation & Insights -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon acc">🔬</div>
+            <div class="card-title">Ablation &amp; Structural Insights</div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-box">
+              <div class="stat-val acc">1.68%</div>
+              <div class="stat-lbl">GARDEN Synthetic<br>Truncation Rate</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-val sec">2.94%</div>
+              <div class="stat-lbl">MLP-A2C With Degree<br>(MLP-A2C-WD)</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-val amb">4.32%</div>
+              <div class="stat-lbl">MLP-A2C<br>(Raw Features Only)</div>
+            </div>
+          </div>
+
+          <ul class="card-list">
+            <li><strong>GAT Matters:</strong> Incorporating 1-hop attention cuts synthetic truncation by <strong>61%</strong> vs. raw-feature MLP and improves path length (<span class="math-sym">R̄<sub>oracle</sub>: 2.31 → 1.95</span>).</li>
+            <li><strong>Critic Interpretability:</strong> Value network peaks at target clusters and structural bridge nodes.</li>
+            <li><strong>The Remaining Failure Ceiling:</strong> On sparser, highly clustered networks (Facebook 4 &amp; 5), nearly <strong>half of all episodes (40.1%–48.2%) still time out</strong> at <span class="math-sym">T<sub>max</sub> = 100</span>!</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: Critical Gap (Memory-Less) & Primary Research Question -->
+    <section class="slide" id="slide-4" data-section="3. Primary Research Question">
+      <div class="slide-badge amber">05 • The Critical Gap &amp; Primary Research Question</div>
+      <h2 class="slide-title">Why GARDEN Gets Stuck: Memory-Less Search → Primary Research Question</h2>
+      <p class="slide-subtitle">
+        Analyzing the root cause of GARDEN's 40–48% timeout rate exposes the foundational gap driving this project.
+      </p>
+
+      <div class="card-grid-2" style="margin-bottom: 10px;">
+        <!-- Root Cause -->
+        <div class="card" style="border-color: var(--amber-border);">
+          <div class="card-header">
+            <div class="card-icon amb">⚠</div>
+            <div class="card-title" style="color: var(--amber);">Memory-Less Limitation in Pisacane et al. (2024)</div>
+          </div>
+          <ul class="card-list amb">
+            <li><strong>Zero History Representation:</strong> The roaming packet carries <em>only</em> the static target representation <span class="math-sym">m = x<sub>u_tgt</sub><sup>GAT</sup></span>.</li>
+            <li><strong>Blind to Past Failures:</strong> Agents have no record of visited nodes or failed subgraphs—the exact same action distribution repeats whenever a node is re-entered.</li>
+            <li><strong>Inevitable Outcome:</strong> Deterministic ping-pong oscillations and trapped wandering inside dense clusters until truncation (<span class="math-sym">T<sub>max</sub> = 100</span>).</li>
+          </ul>
+        </div>
+
+        <!-- Author Future Work Callout -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">💬</div>
+            <div class="card-title">Open Research Need Identified by the Authors</div>
+          </div>
+          <div class="quote-box" style="margin-top: 0;">
+            "For simplicity, we have considered a memory-less search procedure that is akin to a biased random walk. This means that the agents cannot react to the unsuccessful exploration of a given region [...] and the same distribution over actions will apply independently of the historical trajectory."
+            <div class="quote-author">— Pisacane et al. (2024), Section 6: Future Work</div>
+          </div>
+          <p style="font-size: 0.83rem; color: var(--text-muted); margin-top: 6px;">
+            <strong>Explicit Recommendation:</strong> Extend the forwarded packet to encode visited-node history (e.g., via recurrent neural representations) so agents learn to avoid unproductive cycles.
+          </p>
+        </div>
+      </div>
+
+      <!-- Primary Research Question Hero -->
+      <div class="rq-hero">
+        <div class="rq-label">Primary Research Question</div>
+        <div class="rq-text">
+          How can <span class="keyword">decentralized graph routing agents</span> prevent <span class="keyword">action cycles</span> and <span class="keyword">community trapping</span> under partial local visibility?
+        </div>
+      </div>
+
+      <div class="takeaway-bar">
+        <strong>Next Step:</strong> To understand how to represent search history inside a compact message packet, we turn to two complementary paradigms from adjacent graph-search literature.
+      </div>
+    </section>
+
+    <!-- SLIDE 6: Paper 2 — M-Walk (1/2: Problem & MDP) -->
+    <section class="slide" id="slide-5" data-section="4. Literature Insights">
+      <div class="slide-badge">06 • Literature Insight 1 — M-Walk (1 / 2)</div>
+      <h2 class="slide-title">M-Walk: Problem Formulation &amp; MDP Setup</h2>
+      <p class="slide-subtitle">
+        <em>"M-Walk: Learning to Walk over Graphs using Monte Carlo Tree Search"</em> — Shen, Chen, Huang, Guo &amp; Gao (Neural Information Processing Systems (NeurIPS) 2018)
+      </p>
+
+      <div class="card-grid-2">
+        <!-- Left: Problem & Framework -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">🎯</div>
+            <div class="card-title">Problem &amp; M-Walk Framework</div>
+          </div>
+          <p>
+            To solve multi-hop <strong>Knowledge Base Completion (KBC)</strong> without intermediate path labels, the authors introduce <strong>M-Walk</strong>, a novel Reinforcement Learning (RL) framework that integrates a <strong>Deep Recurrent Neural Network (RNN)</strong> state encoder with <strong>Monte Carlo Tree Search (MCTS)</strong>.
+          </p>
+          <ul class="card-list">
+            <li>
+              <strong>History-Dependent States:</strong> Looking only at the current entity is ambiguous—the agent needs the initial query and prior traversal steps to decide where to move next.
+            </li>
+            <li>
+              <strong>Sparse Delayed Rewards:</strong> Feedback is given only at the end of a walk (<span class="math-sym">+1</span> for the true target, <span class="math-sym">0</span> otherwise), causing standard RL exploration to fail.
+            </li>
+          </ul>
+        </div>
+
+        <!-- Right: MDP State & Action -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">⚙</div>
+            <div class="card-title">Markov Decision Process (MDP): State &amp; Action</div>
+          </div>
+          <ul class="card-list sec">
+            <li>
+              <strong>State (Recursive Path History):</strong> Starts from the query and source node, then appends each selected action, newly visited node, and its local 1-hop neighbors and edges at every step.
+            </li>
+            <li>
+              <strong>Action (Dynamic Choice Set):</strong> At the current node, the agent chooses either any outgoing edge to move to an adjacent neighbor, or <span class="math-sym">STOP</span> to finish and output the current node as the predicted target.
+            </li>
+            <li>
+              <strong>Deterministic Transitions:</strong> Because the underlying graph is static and known, moving along an edge deterministically updates the trajectory state.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: Paper 2 — M-Walk (2/2: Architecture, Algorithms & State Encoder) -->
+    <section class="slide" id="slide-6" data-section="4. Literature Insights">
+      <div class="slide-badge">07 • Literature Insight 1 — M-Walk (2 / 2)</div>
+      <h2 class="slide-title">M-Walk: Agent Architecture, Algorithms &amp; History Encoding</h2>
+      <p class="slide-subtitle">
+        High-level overview of how M-Walk learns to plan over graphs—and how its RNN state encoder compresses trajectory history.
+      </p>
+
+      <div class="card-grid-2">
+        <!-- Left: Architecture & Algorithms -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">🧩</div>
+            <div class="card-title">M-Walk Agent Architecture &amp; Algorithms</div>
+          </div>
+          <ul class="card-list">
+            <li>
+              <strong>Shared Policy &amp; Q-Network:</strong> One neural backbone drives both the action policy and Q-value estimates—scoring each outgoing edge and <span class="math-sym">STOP</span> by matching them against the encoded path history.
+            </li>
+            <li>
+              <strong>MCTS Trajectory Generation:</strong> During training, MCTS runs lookahead rollouts via Predictor Upper Confidence Bounds for Trees (<strong>PUCT</strong>), balancing learned policy priors with visit counts and rewards.
+            </li>
+            <li>
+              <strong>Off-Policy Q-Learning:</strong> Updates shared weights across MCTS paths, improving value estimates and the policy together; at test time, MCTS aggregates leaf scores to pick the target.
+            </li>
+            <li>
+              <strong>Why Not Direct Transfer:</strong> Assumes a <em>centralized</em>, fully known graph for tree lookahead (not 1-hop decentralized routing).
+            </li>
+          </ul>
+        </div>
+
+        <!-- Right: State Encoder -> History Representation -> Extracted Concept -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">↳</div>
+            <div class="card-title">Inside the State Encoder: How History Is Represented</div>
+          </div>
+          <div class="metric-list" style="margin-bottom: 8px;">
+            <div class="metric-item">
+              <span class="metric-num" style="background: var(--primary-light); color: var(--primary); border-color: var(--border-highlight);">1</span>
+              <div><strong>Candidate Encoding:</strong> Embeds each outgoing edge–neighbor pair available at the current node.</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num" style="background: var(--primary-light); color: var(--primary); border-color: var(--border-highlight);">2</span>
+              <div><strong>Neighborhood Summary:</strong> Pools candidate embeddings into one fixed-size summary of local options.</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num" style="background: var(--primary-light); color: var(--primary); border-color: var(--border-highlight);">3</span>
+              <div><strong>Gated Recurrent Unit (GRU) Update:</strong> Feeds local summary + chosen action + next node sequentially into a GRU cell to update memory.</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num" style="background: var(--primary-light); color: var(--primary); border-color: var(--border-highlight);">4</span>
+              <div><strong>History Vector Output:</strong> Projects the GRU hidden state into a single vector capturing <em>what happened and in what order</em>.</div>
+            </div>
+          </div>
+
+          <div class="takeaway-bar" style="margin-top: auto;">
+            <strong>Extracted Concept — Sequential / Order-Based Memory:</strong> Stepping chronologically through a GRU encodes history as an ordered chain <span class="math-sym">(v<sub>1</sub> → v<sub>2</sub> → … → v<sub>t</sub>)</span>, preserving step recency and movement direction.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: Paper 3 — PHIL (1/2: Problem & Graph Search Setup) -->
+    <section class="slide" id="slide-7" data-section="4. Literature Insights">
+      <div class="slide-badge secondary">08 • Literature Insight 2 — PHIL (1 / 2)</div>
+      <h2 class="slide-title">PHIL: Problem Formulation &amp; Graph Search Setup</h2>
+      <p class="slide-subtitle">
+        <em>"Learning Graph Search Heuristics"</em> — Pándy, Qiu, Corso, Veličković, Ying, Leskovec &amp; Liò (LoG 2022)
+      </p>
+
+      <div class="card-grid-2">
+        <!-- Left: Problem & Framework -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">🎯</div>
+            <div class="card-title">Problem &amp; PHIL Framework</div>
+          </div>
+          <p>
+            To automate search heuristics for A* and Greedy Best-First Search without manual engineering, the authors introduce <strong>Path Heuristic with Imitation Learning (PHIL)</strong>, combining <strong>Imitation Learning (IL)</strong> with a recurrent <strong>Graph Neural Network (GNN)</strong> in strict <strong>O(1)</strong> time per node.
+          </p>
+          <ul class="card-list sec">
+            <li>
+              <strong>Sequential Data Dependency:</strong> Newly reached nodes depend on earlier heuristic choices, breaking standard independent-sample supervised learning.
+            </li>
+            <li>
+              <strong>Constant-Time Budget:</strong> Computing node priority must stay <span class="math-sym">O(1)</span> regardless of total graph size so search speed does not degrade on large networks.
+            </li>
+          </ul>
+        </div>
+
+        <!-- Right: Graph Search Formulation (State & Action) -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon acc">⊚</div>
+            <div class="card-title">Search Formulation: State &amp; Action</div>
+          </div>
+          <ul class="card-list acc">
+            <li>
+              <strong>Search State (3 Node Sets):</strong> Partitions the graph into <span class="math-sym">CLOSE</span> (already explored), <span class="math-sym">OPEN</span> (candidate frontier), and <span class="math-sym">REST</span> (undiscovered nodes).
+            </li>
+            <li>
+              <strong>Action (Greedy Expansion):</strong> Expands the <span class="math-sym">OPEN</span> node with the lowest predicted distance to target—moving it into <span class="math-sym">CLOSE</span> and pushing its newly discovered <span class="math-sym">REST</span> neighbors (<span class="math-sym">V<sub>new</sub></span>) into <span class="math-sym">OPEN</span>.
+            </li>
+            <li>
+              <strong>Partially Observable Markov Decision Process (POMDP):</strong> Observes only newly added frontier nodes <span class="math-sym">V<sub>new</sub></span>; an oracle supplies true shortest-path distances during training.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="takeaway-bar sec">
+        <strong>Core Design Goal:</strong> To avoid re-exploring dead ends and escape local traps without inspecting the whole graph, PHIL maintains a compact memory of the explored subgraph.
+      </div>
+    </section>
+
+    <!-- SLIDE 9: Paper 3 — PHIL (2/2: Training, Architecture & Coverage Memory) -->
+    <section class="slide" id="slide-8" data-section="4. Literature Insights">
+      <div class="slide-badge secondary">09 • Literature Insight 2 — PHIL (2 / 2)</div>
+      <h2 class="slide-title">PHIL: Training Algorithm, Architecture &amp; Explored-Graph Memory</h2>
+      <p class="slide-subtitle">
+        High-level overview of how PHIL trains with a shortest-path oracle—and how its recurrent GNN builds an order-independent coverage memory.
+      </p>
+
+      <div class="card-grid-2">
+        <!-- Left: Training Algorithm & Architecture -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">🧩</div>
+            <div class="card-title">PHIL Architecture &amp; Training Algorithm</div>
+          </div>
+          <ul class="card-list sec">
+            <li>
+              <strong>Frontier-Only O(1) Evaluation:</strong> Scores only newly added nodes <span class="math-sym">V<sub>new</sub></span> using a bounded 1-hop neighbor sample, keeping runtime independent of total graph size.
+            </li>
+            <li>
+              <strong>Roll-In / Mixed Roll-Out:</strong> Executes initial steps with the learned policy, then collects oracle ground-truth distances along a mixed policy trajectory.
+            </li>
+            <li>
+              <strong>Truncated Backpropagation Through Time (TBTT):</strong> Updates parameters end-to-end across search steps by minimizing distance prediction error.
+            </li>
+            <li>
+              <strong>Why Not Direct Transfer:</strong> Centralized search maintaining global <span class="math-sym">OPEN/CLOSE</span> sets and requiring a full-graph oracle during training.
+            </li>
+          </ul>
+        </div>
+
+        <!-- Right: Recurrent GNN & Coverage History Representation -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon acc">🚀</div>
+            <div class="card-title">Inside the Recurrent GNN: How History Is Represented</div>
+          </div>
+          <div class="metric-list" style="margin-bottom: 8px;">
+            <div class="metric-item">
+              <span class="metric-num">1</span>
+              <div><strong>Target-Aware Node Features:</strong> Combines each frontier node's features with target attributes and direct feature distances.</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num">2</span>
+              <div><strong>1-Hop Graph Convolution:</strong> Aggregates a bounded sample of 1-hop neighbors into a local structural embedding.</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num">3</span>
+              <div><strong>GRU Memory Update:</strong> Combines each new frontier node embedding with the previous explored-graph memory vector.</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num">4</span>
+              <div><strong>Permutation-Invariant Mean Pooling:</strong> Averages updated GRU states across all nodes in <span class="math-sym">V<sub>new</sub></span> to form the next memory <span class="math-sym">z<sub>t+1</sub></span> regardless of node order.</div>
+            </div>
+          </div>
+
+          <div class="takeaway-bar sec" style="margin-top: auto;">
+            <strong>Extracted Concept — Coverage / Set-Based Memory:</strong> Mean-pooling across explored batches ignores visit order and encodes history as a topological set <span class="math-sym">{v<sub>i</sub> ∈ V<sub>visited</sub>}</span>, highlighting exhausted communities.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 10: 5. Comparative Research Question & Hypotheses -->
+    <section class="slide" id="slide-9" data-section="5. Comparative RQ &amp; Hypotheses">
+      <div class="slide-badge amber">10 Comparative Research Question &amp; Hypotheses</div>
+      <h2 class="slide-title">Order vs. Coverage: Comparative Research Question &amp; Hypotheses</h2>
+
+      <!-- Taxonomy SVG -->
+      <div class="diagram-wrap" style="background: #ffffff; padding: 7px 14px; margin-bottom: 9px;">
+        <svg viewBox="0 0 880 110" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two paradigms of history representation taxonomy">
+          <rect x="295" y="4" width="290" height="28" rx="8" fill="#0f172a"/>
+          <text x="440" y="22" text-anchor="middle" font-size="11.5" font-weight="700" fill="#ffffff">How Can Packet History Be Represented?</text>
+
+          <path d="M 380 32 L 220 48" stroke="#2563eb" stroke-width="2"/>
+          <path d="M 500 32 L 660 48" stroke="#6366f1" stroke-width="2"/>
+
+          <!-- Left Branch -->
+          <rect x="40" y="48" width="360" height="56" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+          <text x="220" y="66" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1d4ed8">Order-Based: Sequential Trajectory</text>
+          <text x="220" y="82" text-anchor="middle" font-size="10.2" fill="#334155">M-Walk (Shen et al., 2018) → Chronological GRU</text>
+          <text x="220" y="96" text-anchor="middle" font-size="10.2" font-weight="700" fill="#1e3a8a">(v<tspan baseline-shift="sub" font-size="76%">1</tspan> → v<tspan baseline-shift="sub" font-size="76%">2</tspan> → … → v<tspan baseline-shift="sub" font-size="76%">t</tspan>)  |  Recency &amp; Momentum</text>
+
+          <!-- Right Branch -->
+          <rect x="480" y="48" width="360" height="56" rx="10" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>
+          <text x="660" y="66" text-anchor="middle" font-size="11.5" font-weight="700" fill="#4338ca">Coverage-Based: Explored Subgraph Set</text>
+          <text x="660" y="82" text-anchor="middle" font-size="10.2" fill="#334155">PHIL (Pándy et al., 2022) → Deep Sets Mean Pooling</text>
+          <text x="660" y="96" text-anchor="middle" font-size="10.2" font-weight="700" fill="#312e81">{v<tspan baseline-shift="sub" font-size="76%">i</tspan> ∈ V<tspan baseline-shift="sub" font-size="76%">visited</tspan>}  |  Exhausted Topological Coverage</text>
+        </svg>
+      </div>
+
+      <!-- Comparative RQ Hero -->
+      <div class="rq-hero" style="padding: 12px 20px; margin-bottom: 10px;">
+        <div class="rq-label">Comparative Research Question</div>
+        <div class="rq-text" style="font-size: 1.12rem;">
+          Which memory representation,<span class="keyword">sequential trajectory encoding</span> or <span class="keyword">set-based topological coverage</span>, better prevents action cycles and community trapping in decentralized graph navigation?
+        </div>
+      </div>
+
+      <!-- Hypotheses -->
+      <div class="card-grid-2">
+        <div class="card" style="border-top: 3px solid var(--accent);">
+          <div class="card-header">
+            <div class="card-icon acc">H1</div>
+            <div class="card-title">Hypothesis 1: Loop Elimination (General Memory Benefit)</div>
+          </div>
+          <p>
+            Augmenting the roaming packet with a historical trajectory representation will <strong>significantly reduce navigation failures</strong> caused by endless cyclic exploration and trapped wandering compared to memory-less routing.
+          </p>
+        </div>
+
+        <div class="card" style="border-top: 3px solid var(--secondary);">
+          <div class="card-header">
+            <div class="card-icon sec">H2</div>
+            <div class="card-title">Hypothesis 2: Order vs. Coverage Inductive Bias</div>
+          </div>
+          <ul class="card-list sec">
+            <li><strong>Sequential Memory:</strong> Prevents immediate back-and-forth loops and maintains a consistent forward path across bridge edges.</li>
+            <li><strong>Set-Based Memory:</strong> Superior at escaping dense, highly clustered communities by penalizing re-entry into exhausted clusters regardless of visit order.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 11: 6. Proposed Methodology -->
+    <section class="slide" id="slide-10" data-section="6. Proposed Methodology">
+      <div class="slide-badge accent">11 Proposed Methodology</div>
+      <h2 class="slide-title">Constant-Size Memory-Augmented Packet Routing</h2>
+      <p class="slide-subtitle">
+        Packet carries target embedding plus compressed latent history <span class="math-sym">m<sub>t</sub> = [ x<sub>u_tgt</sub><sup>GAT</sup> ∥ z<sub>t</sub> ]</span> (<span class="math-sym">z<sub>t</sub> ∈ ℝ<sup>d</sup></span>)
+      </p>
+
+      <!-- Pipeline Diagram SVG -->
+      <div class="diagram-wrap" style="background: #ffffff; padding: 10px 16px; margin-bottom: 14px;">
+        <svg viewBox="0 0 950 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Proposed memory-augmented decentralized routing pipeline">
+          <defs>
+            <marker id="arrG" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+              <polygon points="0 0, 7 3.5, 0 7" fill="#059669"/>
+            </marker>
+          </defs>
+          <rect x="6" y="10" width="214" height="76" rx="10" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+          <text x="113" y="33" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e3a8a">1. Local 1-Hop Ego-Graph G<tspan baseline-shift="sub" font-size="76%">u</tspan></text>
+          <text x="113" y="51" text-anchor="middle" font-size="10" fill="#475569">Graph Attention Network (GAT)</text>
+          <text x="113" y="68" text-anchor="middle" font-size="10" font-weight="600" fill="#2563eb">Continuous Embedding x<tspan baseline-shift="sub" font-size="76%">u</tspan><tspan baseline-shift="super" font-size="75%">GAT</tspan></text>
+
+          <line x1="224" y1="48" x2="254" y2="48" stroke="#059669" stroke-width="2.2" marker-end="url(#arrG)"/>
+
+          <rect x="260" y="10" width="242" height="76" rx="10" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.5"/>
+          <text x="381" y="33" text-anchor="middle" font-size="11.5" font-weight="700" fill="#312e81">2. Memory Update Unit → z<tspan baseline-shift="sub" font-size="76%">t</tspan></text>
+          <text x="381" y="51" text-anchor="middle" font-size="10" fill="#475569">• Sequential: GRU(z<tspan baseline-shift="sub" font-size="76%">t-1</tspan>, x<tspan baseline-shift="sub" font-size="76%">u</tspan><tspan baseline-shift="super" font-size="75%">GAT</tspan>)</text>
+          <text x="381" y="68" text-anchor="middle" font-size="10" fill="#475569">• Set-Based: Deep Sets Mean Pool</text>
+
+          <line x1="506" y1="48" x2="536" y2="48" stroke="#059669" stroke-width="2.2" marker-end="url(#arrG)"/>
+
+          <rect x="542" y="10" width="276" height="76" rx="10" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+          <text x="680" y="33" text-anchor="middle" font-size="11.5" font-weight="700" fill="#065f46">3. Recurrent Advantage Actor-Critic</text>
+          <text x="680" y="51" text-anchor="middle" font-size="10" fill="#475569">Policy π(a | G<tspan baseline-shift="sub" font-size="76%">u</tspan>, m<tspan baseline-shift="sub" font-size="76%">t</tspan>) &amp; Critic v(x<tspan baseline-shift="sub" font-size="76%">u</tspan>, m<tspan baseline-shift="sub" font-size="76%">t</tspan>)</text>
+          <text x="680" y="68" text-anchor="middle" font-size="10" fill="#047857">(R-A2C) trained via CTDE</text>
+
+          <line x1="822" y1="48" x2="852" y2="48" stroke="#059669" stroke-width="2.2" marker-end="url(#arrG)"/>
+
+          <rect x="858" y="18" width="86" height="60" rx="10" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+          <text x="901" y="44" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">Next Hop</text>
+          <text x="901" y="62" text-anchor="middle" font-size="10.5" font-weight="700" fill="#b45309">u' ∈ N(u)</text>
+        </svg>
+      </div>
+
+      <!-- 4 Evaluated Variants -->
+      <div class="card-grid-4" style="margin-bottom: 12px;">
+        <div class="card" style="padding: 13px 15px;">
+          <div class="card-header" style="margin-bottom: 6px;">
+            <div class="card-icon" style="width: 26px; height: 26px; font-size: 0.8rem;">1</div>
+            <div class="card-title" style="font-size: 0.9rem;">Memory-Less</div>
+          </div>
+          <p style="font-size: 0.79rem;">
+            Reactive baseline depending solely on <span class="math-sym">[ x<sub>u'</sub><sup>GAT</sup> ∥ x<sub>u_tgt</sub><sup>GAT</sup> ]</span>.
+          </p>
+        </div>
+
+        <div class="card" style="padding: 13px 15px; border-color: var(--border-highlight);">
+          <div class="card-header" style="margin-bottom: 6px;">
+            <div class="card-icon" style="width: 26px; height: 26px; font-size: 0.8rem;">2</div>
+            <div class="card-title" style="font-size: 0.9rem;">Sequential (GRU)</div>
+          </div>
+          <p style="font-size: 0.79rem;">
+            <span class="math-sym">z<sub>t+1</sub> = GRU(z<sub>t</sub>, x<sub>v<sub>t+1</sub></sub><sup>GAT</sup>)</span> preserving order &amp; temporal recency.
+          </p>
+        </div>
+
+        <div class="card" style="padding: 13px 15px; border-color: #c7d2fe;">
+          <div class="card-header" style="margin-bottom: 6px;">
+            <div class="card-icon sec" style="width: 26px; height: 26px; font-size: 0.8rem;">3</div>
+            <div class="card-title" style="font-size: 0.9rem;">Set-Based (Deep Sets)</div>
+          </div>
+          <p style="font-size: 0.79rem;">
+            <span class="math-sym">MLP(mean<sub>v∈V_vis</sub> MLP(x<sub>v</sub><sup>GAT</sup>))</span> capturing unordered visited coverage.
+          </p>
+        </div>
+
+        <div class="card" style="padding: 13px 15px; border-color: var(--amber-border);">
+          <div class="card-header" style="margin-bottom: 6px;">
+            <div class="card-icon amb" style="width: 26px; height: 26px; font-size: 0.8rem;">4</div>
+            <div class="card-title" style="font-size: 0.9rem;">Action-Masked Tabu</div>
+          </div>
+          <p style="font-size: 0.79rem;">
+            Symbolic First-In, First-Out (<strong>FIFO</strong>) buffer of last <span class="math-sym">k</span> node IDs masking backward logits to <span class="math-sym">-∞</span>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 12: 7. Experimental Setup & Evaluation -->
+    <section class="slide" id="slide-11" data-section="7. Experimental Setup">
+      <div class="slide-badge accent">12 • Section 7 — Experimental Setup &amp; Evaluation</div>
+      <h2 class="slide-title">Datasets, Strict Generalization Splits &amp; Evaluation Plan</h2>
+
+      <div class="card-grid-3" style="margin-bottom: 12px;">
+        <!-- Datasets & Splits -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon">🕸</div>
+            <div class="card-title">Datasets &amp; Leak-Free Splits</div>
+          </div>
+          <ul class="card-list">
+            <li><strong>Real Social Graphs:</strong> 5 SNAP Facebook ego-networks (148–532 nodes) with anonymized user attributes.</li>
+            <li><strong>Target-Node Split:</strong> <strong>80% train / 10% validation / 10% test</strong> (<span class="math-sym">V<sub>test</sub></span> unseen targets prevent route memorization).</li>
+            <li><strong>Synthetic Modular Graphs:</strong> Spatial homophilic networks with tunable density (<span class="math-sym">β</span>) &amp; modularity; tested via <strong>Inductive Graph Split</strong> on unseen graphs.</li>
+          </ul>
+        </div>
+
+        <!-- Baselines -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon sec">⚖</div>
+            <div class="card-title">Benchmark Baselines</div>
+          </div>
+          <ul class="card-list sec">
+            <li><strong>GARDEN (Pisacane et al., 2024):</strong> Primary memory-less GAT + A2C decentralized baseline.</li>
+            <li><strong>Action-Masked Tabu Walker:</strong> Symbolic <span class="math-sym">k</span>-step backtracking prevention.</li>
+            <li><strong>MLP-A2C &amp; MLP-A2C With Degree (MLP-A2C-WD):</strong> RL without graph attention (raw attributes ± degree).</li>
+            <li><strong>Decentralized Heuristics:</strong> Greedy, Softmax Distance, Degree Hub, Random Walkers.</li>
+            <li><strong>Centralized Oracle:</strong> Dijkstra / Breadth-First Search (<strong>BFS</strong>) upper bound (<span class="math-sym">R<sub>oracle</sub> = 1.0</span>).</li>
+          </ul>
+        </div>
+
+        <!-- Metrics -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon acc">📈</div>
+            <div class="card-title">Evaluation Metrics</div>
+          </div>
+          <div class="metric-list">
+            <div class="metric-item">
+              <span class="metric-num">1</span>
+              <div><strong>Truncation Rate (<span class="math-sym">R<sub>trunc</sub></span> %):</strong> Episodes exceeding <span class="math-sym">T<sub>max</sub> = 100</span> (primary loop/trap failure metric).</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num">2</span>
+              <div><strong>Mean Oracle Ratio (<span class="math-sym"><span style="text-decoration: overline;">R</span><sub>oracle</sub></span>):</strong> Traversed path length divided by true shortest path.</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num">3</span>
+              <div><strong>Win Rate (<span class="math-sym">R<sub>win</sub></span> %):</strong> Episodes achieving shortest path among decentralized baselines.</div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-num">4</span>
+              <div><strong>Revisit Rate &amp; Cycle Count:</strong> Average repeated node visits per trajectory.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comparison Plan -->
+      <div class="card" style="padding: 13px 20px; background: #f8fafc;">
+        <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800; color: var(--primary); margin-bottom: 6px;">
+          Comparison Plan
+        </div>
+        <div class="card-grid-3" style="gap: 14px;">
+          <div style="font-size: 0.81rem; color: var(--text-muted); line-height: 1.4;">
+            <strong style="color: var(--text);">1. Real-World Benchmark (H1):</strong> Compare sequential &amp; set-based approaches vs. all baselines across all 5 Facebook graphs.
+          </div>
+          <div style="font-size: 0.81rem; color: var(--text-muted); line-height: 1.4;">
+            <strong style="color: var(--text);">2. Structural Stress-Test (H2):</strong> Sweep edge density (<span class="math-sym">β</span>) &amp; modularity in synthetic graphs to isolate regime crossovers.
+          </div>
+          <div style="font-size: 0.81rem; color: var(--text-muted); line-height: 1.4;">
+            <strong style="color: var(--text);">3. Loop &amp; Oscillation Analysis:</strong> Decompose failures into 2-step ping-pongs vs. extended cluster wandering.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 13: 8. Potential Risks & Fallback Strategy -->
+    <section class="slide" id="slide-12" data-section="8. Risks &amp; Fallback Strategy">
+      <div class="slide-badge rose">13  — Potential Risks &amp; Fallback Strategy</div>
+      <h2 class="slide-title">Anticipated Technical Risks &amp; Mitigation Plans</h2>
+      <p class="slide-subtitle">
+        Proactive engineering safeguards to ensure valid scientific comparisons even under recurrent optimization difficulties or severe structural shifts.
+      </p>
+
+      <div class="card-grid-3">
+        <!-- Risk 1 -->
+        <div class="card" style="border-top: 4px solid var(--rose);">
+          <div class="card-header">
+            <div class="card-icon rose">1</div>
+            <div class="card-title">Training Instability in Recurrent RL</div>
+          </div>
+          <div style="background: var(--rose-light); border: 1px solid var(--rose-border); border-radius: 8px; padding: 9px 11px; margin-bottom: 10px;">
+            <div style="font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: var(--rose); margin-bottom: 3px;">Risk</div>
+            <p style="font-size: 0.8rem; color: #881337; line-height: 1.4;">
+              Training GRU networks via RL can become unstable or converge slowly under sparse terminal rewards across horizons up to 100 hops.
+            </p>
+          </div>
+          <div style="background: var(--accent-light); border: 1px solid var(--accent-border); border-radius: 8px; padding: 9px 11px; margin-top: auto;">
+            <div style="font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: var(--accent); margin-bottom: 3px;">Fallback Plan</div>
+            <p style="font-size: 0.8rem; color: #064e3b; line-height: 1.4;">
+              Freeze pre-trained GAT encoder weights and train only the recurrent Actor-Critic heads; add a small step penalty (<span class="math-sym">-0.01</span>/hop) to incentivize forward progress.
+            </p>
+          </div>
+        </div>
+
+        <!-- Risk 2 -->
+        <div class="card" style="border-top: 4px solid var(--amber);">
+          <div class="card-header">
+            <div class="card-icon amb">2</div>
+            <div class="card-title">Information Loss in Set-Based Memory</div>
+          </div>
+          <div style="background: var(--amber-light); border: 1px solid var(--amber-border); border-radius: 8px; padding: 9px 11px; margin-bottom: 10px;">
+            <div style="font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: var(--amber); margin-bottom: 3px;">Risk</div>
+            <p style="font-size: 0.8rem; color: var(--amber-text); line-height: 1.4;">
+              Averaging all visited node embeddings over long paths weakens the signal, making recent dead ends hard to distinguish from older nodes.
+            </p>
+          </div>
+          <div style="background: var(--accent-light); border: 1px solid var(--accent-border); border-radius: 8px; padding: 9px 11px; margin-top: auto;">
+            <div style="font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: var(--accent); margin-bottom: 3px;">Fallback Plan</div>
+            <p style="font-size: 0.8rem; color: #064e3b; line-height: 1.4;">
+              Restrict Deep Sets pooling to a <strong>sliding window of the last <span class="math-sym">W</span> visited nodes</strong>, or apply attention/degree-weighted pooling prioritizing structural hubs and bridges.
+            </p>
+          </div>
+        </div>
+
+        <!-- Risk 3 -->
+        <div class="card" style="border-top: 4px solid var(--secondary);">
+          <div class="card-header">
+            <div class="card-icon sec">3</div>
+            <div class="card-title">Overfitting to Training Paths</div>
+          </div>
+          <div style="background: var(--secondary-light); border: 1px solid #c7d2fe; border-radius: 8px; padding: 9px 11px; margin-bottom: 10px;">
+            <div style="font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: var(--secondary); margin-bottom: 3px;">Risk</div>
+            <p style="font-size: 0.8rem; color: #312e81; line-height: 1.4;">
+              Recurrent memory policies may memorize specific training corridors instead of learning generalizable loop-avoidance strategies for unseen targets/graphs.
+            </p>
+          </div>
+          <div style="background: var(--accent-light); border: 1px solid var(--accent-border); border-radius: 8px; padding: 9px 11px; margin-top: auto;">
+            <div style="font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: var(--accent); margin-bottom: 3px;">Fallback Plan</div>
+            <p style="font-size: 0.8rem; color: #064e3b; line-height: 1.4;">
+              Deploy the <strong>Action-Masked Tabu</strong> baseline (FIFO mask forbidding immediate returns to the last <span class="math-sym">k</span> nodes) as a zero-training, generalization-safe baseline.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer Navigation -->
+  <footer>
+    <div class="dots-nav" id="dotsContainer">
+      <div class="dot active" onclick="goToSlide(0)"></div>
+      <div class="dot" onclick="goToSlide(1)"></div>
+      <div class="dot" onclick="goToSlide(2)"></div>
+      <div class="dot" onclick="goToSlide(3)"></div>
+      <div class="dot" onclick="goToSlide(4)"></div>
+      <div class="dot" onclick="goToSlide(5)"></div>
+      <div class="dot" onclick="goToSlide(6)"></div>
+      <div class="dot" onclick="goToSlide(7)"></div>
+      <div class="dot" onclick="goToSlide(8)"></div>
+      <div class="dot" onclick="goToSlide(9)"></div>
+      <div class="dot" onclick="goToSlide(10)"></div>
+      <div class="dot" onclick="goToSlide(11)"></div>
+      <div class="dot" onclick="goToSlide(12)"></div>
+    </div>
+
+    <div class="controls">
+      <span class="counter" id="slideCounter">01 / 13</span>
+      <button class="btn" id="prevBtn" onclick="prevSlide()" disabled>
+        ← Prev <span class="kbd">Left</span>
+      </button>
+      <button class="btn btn-primary" id="nextBtn" onclick="nextSlide()">
+        Next → <span class="kbd">Right</span>
+      </button>
+      <button class="btn" onclick="toggleFullscreen()" title="Toggle Fullscreen (F)">
+        ⛶
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const dots = document.querySelectorAll('.dot');
+    const counter = document.getElementById('slideCounter');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const progressBar = document.getElementById('progressBar');
+    const sectionTag = document.getElementById('sectionTag');
+
+    let currentSlide = 0;
+    const totalSlides = slides.length;
+
+    // Support ?slide=N or #p=N initialization
+    (function initFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const qSlide = params.get('slide');
+      const hMatch = window.location.hash.match(/^#(?:p=|slide-)(\d+)$/);
+      const parsed = qSlide !== null ? parseInt(qSlide, 10) : (hMatch ? parseInt(hMatch[1], 10) : 0);
+      if (!Number.isNaN(parsed) && parsed >= 0 && parsed < totalSlides) {
+        currentSlide = parsed;
+      }
+    })();
+
+    function updateSlide(skipHash) {
+      slides.forEach((slide, idx) => {
+        slide.classList.remove('active', 'previous');
+        if (idx === currentSlide) {
+          slide.classList.add('active');
+          slide.scrollTop = 0;
+        } else if (idx < currentSlide) {
+          slide.classList.add('previous');
+        }
+      });
+
+      dots.forEach((dot, idx) => {
+        dot.classList.toggle('active', idx === currentSlide);
+      });
+
+      const activeSection = slides[currentSlide].getAttribute('data-section') || '';
+      sectionTag.textContent = activeSection;
+
+      counter.textContent = String(currentSlide + 1).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+      progressBar.style.width = ((currentSlide + 1) / totalSlides * 100) + '%';
+
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === totalSlides - 1;
+      if (currentSlide === totalSlides - 1) {
+        nextBtn.classList.remove('btn-primary');
+      } else {
+        nextBtn.classList.add('btn-primary');
+      }
+
+      if (!skipHash && window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', '#p=' + currentSlide);
+      }
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    function goToSlide(index) {
+      if (index >= 0 && index < totalSlides) {
+        currentSlide = index;
+        updateSlide();
+      }
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.log(err));
+      } else if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        goToSlide(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        goToSlide(totalSlides - 1);
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+    });
+
+    // Touch swipe navigation
+    let touchStartX = 0;
+    window.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+    window.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].screenX - touchStartX;
+      if (Math.abs(dx) > 50) {
+        if (dx < 0) nextSlide();
+        else prevSlide();
+      }
+    }, { passive: true });
+
+    document.body.classList.add('no-transitions');
+    updateSlide(true);
+    void document.body.offsetHeight;
+    document.body.classList.remove('no-transitions');
+  </script>
+</body>
+</html>
