@@ -6,6 +6,42 @@ An empirical and theoretical investigation into memory mechanisms for decentrali
 
 ---
 
+## 🛠️ Quickstart with `uv`
+
+This repository uses [`uv`](https://github.com/astral-sh/uv) for fast, deterministic, reproducible dependency management and execution.
+
+### 1. Synchronize the Environment
+`uv` automatically provisions the Python environment, resolves all dependencies (including CUDA 12.4 PyTorch wheels), and locks them in `uv.lock`:
+
+```powershell
+uv sync
+```
+
+### 2. Run Commands & Tests
+You do not need to manually activate any virtual environment; `uv run` executes directly within the locked environment:
+
+```powershell
+# Run the test suite
+uv run pytest -v -s
+
+# Run Python scripts
+uv run python src/data/download_snap.py
+
+# Launch JupyterLab
+uv run jupyter lab
+```
+
+### 3. Adding or Updating Dependencies
+```powershell
+# Add a new runtime dependency
+uv add scipy
+
+# Add a development dependency
+uv add --dev pytest-benchmark
+```
+
+---
+
 ## 📁 Repository Structure
 
 ```
@@ -34,42 +70,9 @@ An empirical and theoretical investigation into memory mechanisms for decentrali
 │   ├── training/             # CTDE Recurrent Advantage Actor-Critic (R-A2C) trainer
 │   └── utils/                # Metrics (R_trunc, R_oracle, R_win, loop counts), logging, seeding
 ├── tests/                    # Pytest test suite for environment, models, and baselines
-├── pyproject.toml            # Package specifications and dependencies
-├── requirements.txt          # Python dependencies
+├── pyproject.toml            # Package specifications and uv source configuration
+├── uv.lock                   # Deterministic lockfile
 └── README.md
-```
-
----
-
-## 🛠️ Environment Setup
-
-### 1. Prerequisites
-- Python 3.12 (or >= 3.10)
-- NVIDIA GPU with CUDA support (tested with RTX 4050 Laptop, CUDA 12.4)
-- `uv` (recommended) or standard `python -m venv`
-
-### 2. Quick Setup with `uv`
-
-```powershell
-# Create virtual environment
-uv venv .venv --python 3.12
-
-# Activate virtual environment
-.venv\Scripts\activate
-
-# Install PyTorch with CUDA 12.4 support
-uv pip install torch --index-url https://download.pytorch.org/whl/cu124
-
-# Install all project dependencies in editable mode
-uv pip install -e ".[dev]"
-```
-
-Alternatively, with standard `pip`:
-```powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-pip install -e .
 ```
 
 ---
