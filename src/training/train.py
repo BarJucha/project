@@ -1,4 +1,4 @@
-"""CLI script to train GARDEN and MLP-A2C models on processed graphs."""
+"""CLI script to train GARDEN, MLP-A2C, GRU, and Deep Sets models on processed graphs."""
 import argparse
 import pickle
 from pathlib import Path
@@ -7,17 +7,30 @@ import numpy as np
 from src.env.graph_env import GraphNavEnv
 from src.data.splits import load_splits_and_pairs
 from src.models.garden import GARDENAgent, MLPA2CAgent
+from src.models.memory import DeepSetsMemoryAgent, GRUMemoryAgent
 from src.training.a2c_trainer import A2CTrainer
+from src.training.recurrent_trainer import RecurrentA2CTrainer
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train CTDE A2C Graph Navigation Agent")
+    parser = argparse.ArgumentParser(description="Train CTDE A2C / R-A2C Graph Navigation Agent")
     parser.add_argument("--graph", type=str, default="facebook_1", help="Graph name in data/processed/")
-    parser.add_argument("--model", type=str, default="garden", choices=["garden", "mlp", "mlp_wd"], help="Model type")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="garden",
+        choices=["garden", "mlp", "mlp_wd", "gru", "deepsets"],
+        help="Model type",
+    )
     parser.add_argument("--episodes", type=int, default=5000, help="Number of training episodes")
     parser.add_argument("--eval_every", type=int, default=500, help="Evaluation interval")
     parser.add_argument("--hidden_dim", type=int, default=64, help="Hidden dimension for Actor/Critic/GAT")
     parser.add_argument("--rep_dim", type=int, default=32, help="Representation dimension for GAT")
+    parser.add_argument("--memory_dim", type=int, default=32, help="Latent memory dimension for GRU / Deep Sets")
+    parser.add_argument("--window_size", type=int, default=None, help="Optional sliding memory window W")
+    parser.add_argument("--freeze_gat", action="store_true", help="Freeze GAT encoder weights during training")
+    parser.add_argument("--gat_checkpoint", type=str, default=None, help="Optional pretrained GARDEN checkpoint for GAT")
+    parser.add_argument("--step_penalty", type=float, default=0.0, help="Optional per-step reward penalty (e.g. -0.01)")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--entropy_coef", type=float, default=1e-3, help="Entropy coefficient lambda")
     parser.add_argument("--device", type=str, default="cpu", help="Device (cpu, cuda:0)")
@@ -57,7 +70,7 @@ def main():
             device=args.device,
             name=f"MLPA2CWD_{args.graph}",
         )
-    else:
+    elif args.model == "mlp":
         agent = MLPA2CAgent(
             env=env,
             hidden_dim=args.hidden_dim,
@@ -67,15 +80,57 @@ def main():
             device=args.device,
             name=f"MLPA2C_{args.graph}",
         )
+    elif args.model == "gru":
+        agent = GRUMemoryAgent(
+            env=env,
+            hidden_dim=args.hidden_dim,
+            rep_dim=args.rep_dim,
+            memory_dim=args.memory_dim,
+            lr=args.lr,
+            entropy_coef=args.entropy_coef,
+            use_degree=True,
+            freeze_gat=args.freeze_gat,
+            window_size=args.window_size,
+            device=args.device,
+            name=f"GRU_{args.graph}",
+        )
+    else:
+        agent = DeepSetsMemoryAgent(
+            env=env,
+            hidden_dim=args.hidden_dim,
+            rep_dim=args.rep_dim,
+            memory_dim=args.memory_dim,
+            lr=args.lr,
+            entropy_coef=args.entropy_coef,
+            use_degree=True,
+            freeze_gat=args.freeze_gat,
+            window_size=args.window_size,
+            device=args.device,
+            name=f"DeepSets_{args.graph}",
+        )
 
-    trainer = A2CTrainer(
-        agent=agent,
-        env=env,
-        train_targets=splits["train"],
-        val_pairs=val_pairs,
-        checkpoint_dir=f"checkpoints/{args.graph}",
-        eval_every=args.eval_every,
-    )
+    if args.gat_checkpoint and hasattr(agent, "load_gat_weights"):
+        agent.load_gat_weights(args.gat_checkpoint, freeze=args.freeze_gat)
+
+    if args.model in ("gru", "deepsets"):
+        trainer = RecurrentA2CTrainer(
+            agent=agent,
+            env=env,
+            train_targets=splits["train"],
+            val_pairs=val_pairs,
+            checkpoint_dir=f"checkpoints/{args.graph}",
+            eval_every=args.eval_every,
+            step_penalty=args.step_penalty,
+        )
+    else:
+        trainer = A2CTrainer(
+            agent=agent,
+            env=env,
+            train_targets=splits["train"],
+            val_pairs=val_pairs,
+            checkpoint_dir=f"checkpoints/{args.graph}",
+            eval_every=args.eval_every,
+        )
 
     trainer.train(num_episodes=args.episodes, val_subset_size=100, verbose=True)
 

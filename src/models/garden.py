@@ -93,6 +93,20 @@ class GARDENAgent(BaseWalker):
         if self.train_mode or self.cached_embeddings is None:
             self.embed_graph()
 
+    def train(self, mode: bool = True) -> "GARDENAgent":
+        """Switches between training (stochastic) and evaluation (greedy) modes."""
+        self.train_mode = mode
+        self.greedy_mode = not mode
+        self.gnn.train(mode)
+        self.actor.train(mode)
+        self.critic.train(mode)
+        self.cached_embeddings = None
+        return self
+
+    def eval(self) -> "GARDENAgent":
+        """Sets the agent to greedy evaluation mode."""
+        return self.train(False)
+
     def get_action_distribution(self, obs: Observation) -> Tuple[T.Tensor, T.Tensor]:
         """Calculates policy probabilities and log-probabilities for candidate actions."""
         if self.cached_embeddings is None:
@@ -192,6 +206,18 @@ class MLPA2CAgent(BaseWalker):
 
     def reset(self, source: int, target: int) -> None:
         pass
+
+    def train(self, mode: bool = True) -> "MLPA2CAgent":
+        """Switches between training (stochastic) and evaluation (greedy) modes."""
+        self.train_mode = mode
+        self.greedy_mode = not mode
+        self.actor.train(mode)
+        self.critic.train(mode)
+        return self
+
+    def eval(self) -> "MLPA2CAgent":
+        """Sets the agent to greedy evaluation mode."""
+        return self.train(False)
 
     def get_action_distribution(self, obs: Observation) -> Tuple[T.Tensor, T.Tensor]:
         nbr_feats = self.node_features[obs.neighbors]

@@ -35,11 +35,16 @@ class A2CTrainer:
 
     def train_episode(self) -> Dict[str, float]:
         """Runs a single episodic CTDE update."""
-        self.agent.train_mode = True
-        self.agent.greedy_mode = False
-        
+        if hasattr(self.agent, "train"):
+            self.agent.train()
+        else:
+            self.agent.train_mode = True
+            self.agent.greedy_mode = False
+
         # Sample fresh training pair (u_src, u_tgt in V_train)
         obs, info = self.env.reset()  # env target_nodes are set to train_targets
+        if hasattr(self.agent, "reset"):
+            self.agent.reset(obs.current_node, obs.target_node)
         
         log_probs = []
         entropies = []
